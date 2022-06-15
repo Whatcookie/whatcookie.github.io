@@ -138,13 +138,13 @@ Since RPCS3 uses [LLVM](https://en.wikipedia.org/wiki/LLVM) to generate code, it
 
 Screenshots captured on an i9 12900K @5.2GHz with [AVX-512 enabled](https://www.reddit.com/r/rpcs3/comments/tqt1ko/clearing_up_some_avx512_misinformation_and_how_to/)
 
-From left to right: SSE2, SSE4.1, AVX2/FMA, and icelake tier AVX-512.
+From left to right: SSE2, SSE4.1, AVX2/FMA, and Icelake tier AVX-512.
 
 The performance when targeting SSE2 is absolutely terrible, likely due to the lack of the `pshufb` instruction from [SSSE3](https://en.wikipedia.org/wiki/SSSE3). `pshufb` is invaluable for emulating the `shufb` instruction, and it's also essential for byteswapping vectors, something that's necessary since the PS3 is a big [endian](https://en.wikipedia.org/wiki/Endianness) system, while x86 is little endian.
 
 The SSE4.1 target achieves an average of 160 FPS, while the AVX2/FMA target achieves an average of 190 FPS. This is a 18% improvement over the SSE4.1 target. AVX2 doesn't include many new instructions over SSE4.1, but it does include a new 3 operand form for instructions, which eliminates many register to register `mov` instructions. Crucially, all CPUs that support AVX2 also support [FMA](https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation#Fused_multiply%E2%80%93add) instructions. FMA instructions aren't just faster than a chain of multiply + add instructions, but can also produce different results due to not rounding to single precision between the multiply and the add. Accurately emulating this without FMA instructions adds some overhead, and so native FMA operations help out quite a bit.
 
-The icelake tier AVX-512 target hits a ludicrous 235 FPS average, 23% faster than the AVX2/FMA target. The sheer number of new instructions added in AVX-512 is so large that quite a number of them end up being useful for RPCS3. Unlike AVX2 which was mostly a straightforward extension of existing SSE instructions to 256 bits, AVX-512 includes a huge number of new features which are very useful for SIMD programming, even at lower bit widths. However, since intel chose to market AVX-512 with the -512 moniker, people who aren't familiary with the instruction set usually fixate on the 512 bit vector aspect of the instruction set.
+The Icelake tier AVX-512 target hits a ludicrous 235 FPS average, 23% faster than the AVX2/FMA target. The sheer number of new instructions added in AVX-512 is so large that quite a number of them end up being useful for RPCS3. Unlike AVX2 which was mostly a straightforward extension of existing SSE instructions to 256 bits, AVX-512 includes a huge number of new features which are very useful for SIMD programming, even at lower bit widths. However, since intel chose to market AVX-512 with the -512 moniker, people who aren't familiar with the instruction set usually fixate on the 512 bit vector aspect of the instruction set.
 
 # Conclusion
 
