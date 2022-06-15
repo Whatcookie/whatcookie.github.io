@@ -101,9 +101,9 @@ RPCS3 will use the clamping strategy to handle floating point numbers when you s
 
 Finally, it's worth noting that double precision float instructions on the SPUs are actually IEEE compliant. Unlike on the PS2 where all of the floating point hardware has a non compliant implementation each piece of the PS3 hardware has its own behavior. The FPU on the main PowerPC core of the PS3 is IEEE compliant. However the vector floating point unit on that same core only implements enough to be compliant with Java's standard for floating point. Throw in the PS3's gpu which has its own floating point hardware, and you're looking at 5 separate pieces of floating point hardware which all have different behavior. What a mess.
 
-# VGF2PAFFINEQB
+# VGF2P8AFFINEQB
 
-The `vgf2paffineqb` is an instruction intended for accelerating cryptographic calculations, however many SIMD programmers have realized that the instruction is useful for non cryptographic purposes as well. For RPCS3 the ability to [shuffle bits](http://0x80.pl/articles/avx512-galois-field-for-bit-shuffling.html) is useful.
+The `vgf2p8affineqb` is an instruction intended for accelerating cryptographic calculations, however many SIMD programmers have realized that the instruction is useful for non cryptographic purposes as well. For RPCS3 the ability to [shuffle bits](http://0x80.pl/articles/avx512-galois-field-for-bit-shuffling.html) is useful.
 
 This bit shuffling capability is useful for emulating part of the `shufb` SPU instruction. `shufb` is similar in behavior to the x86 instruction `pshufb`. Both instructions will rearrange bytes based off indices provided in another vector. Both instructions also have special case inputs which will insert a constant value into the destination value, rather than taking a value from one of the input vectors.
 
@@ -122,7 +122,7 @@ The spu instruction `shufb` has 3 special case inputs:
 
 Additionally, the spu instruction `shufb` indexes into the vector by reverse order compared to `pshufb`, and `shufb` also takes 3 inputs, 2 data vectors and 1 vector containing indices. `pshufb` only takes 2 input vectors, 1 data vector and 1 vector with indices.
 
-Actually explaining how `vgf2paffineqb` is used here is out of scope for this article, and will likely be the next subject I blog about. The AVX2 implementation of `shufb` has a reciprocal throughput of 4, while the `vgf2paffineqb` version has a reciprocal throughput of 2.3. This isn't a great result considering that the PS3 has a reciprocal throughput of 1 for this instruction, and the machine runs at 3.2ghz. However only a fraction of `shufb` instructions will need the full emulation, thanks to many optimizations applied during common uses of the instruction.
+Actually explaining how `vgf2p8affineqb` is used here is out of scope for this article, and will likely be the next subject I blog about. The AVX2 implementation of `shufb` has a reciprocal throughput of 4, while the `vgf2p8affineqb` version has a reciprocal throughput of 2.3. This isn't a great result considering that the PS3 has a reciprocal throughput of 1 for this instruction, and the machine runs at 3.2ghz. However only a fraction of `shufb` instructions will need the full emulation, thanks to many optimizations applied during common uses of the instruction.
 
 # Myriad of new shuffle instructions
 
