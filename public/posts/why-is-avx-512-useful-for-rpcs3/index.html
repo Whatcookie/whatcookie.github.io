@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+
+    <head><title>Why Is AVX 512 Useful for RPCS3? &ndash; Whatcookie&#39;s blog</title>
+<meta name="description" content="Contacts below:">
+
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"/>
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.2/css/all.min.css" integrity="sha512-HK5fgLBL+xu6dm/Ii3z4xhlSUyZgTT9tuc/hSrtw6uzJOvgRr2a9jyxxT1ely+B+xFAmJKVSTbpM/CuL7qxO8w==" crossorigin="anonymous" />
+
+
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/academicons/1.9.1/css/academicons.min.css" integrity="sha512-b1ASx0WHgVFL5ZQhTgiPWX+68KjS38Jk87jg7pe+qC7q9YkEtFq0z7xCglv7qGIs/68d3mAp+StfC8WKC5SSAg==" crossorigin="anonymous" />
+
+
+<link rel="stylesheet" href="https://whatcookie.github.io/css/colour/gruvbox-dark.css">
+<link rel="stylesheet" href="https://whatcookie.github.io/css/colour/dark-mode.css">
+<link rel="stylesheet" href="https://whatcookie.github.io/css/risotto.css">
+<link rel="stylesheet" href="https://whatcookie.github.io/css/custom.css">
+</head>
+
+    <body>
+        <div class="page">
+
+            <header class="page__header"><h1 class="page__logo"><a href="https://whatcookie.github.io" class="page__logo-inner">Whatcookie&#39;s blog</a></h1>
+<nav class="page__nav main-nav">
+    <ul>
+    
+    
+    <li class="main-nav__item"><a class="nav-main-item" href="/about/" title="">About</a></li>
+    
+    <li class="main-nav__item"><a class="nav-main-item active" href="/posts/" title="Posts">Posts</a></li>
+    
+    </ul>
+</nav>
+
+</header>
+
+            <section class="page__body">
+    <header class="content__header">
+        <h1>Why Is AVX 512 Useful for RPCS3?</h1>
+    </header>
+    <div class="content__body">
+        <p>It&rsquo;s often said that the importance of the difference between instruction sets on modern computers <a href="https://chipsandcheese.com/2021/07/13/arm-or-x86-isa-doesnt-matter/">is overblown,</a> and it&rsquo;s hard to actually disagree with this observation. Since 90% of the average program is made up of basic ALU instructions, loads and stores, and branch instructions, and given the fact that the gap between different instruction sets is very small in terms of these basic instructions, it&rsquo;s easy to agree with this conclusion.</p>
+<p>But the PS3 emulator <a href="https://rpcs3.net/">RPCS3</a> isn&rsquo;t an average program. Even if you haven&rsquo;t used the emulator itself, you may have heard RPCS3 brought up as an example of consumer software that can take advantage of AVX-512. In this blog post I&rsquo;ll cover why exactly the new instructions and features introduced in the AVX-512 family are so useful for PS3 emulation. In <a href="https://github.com/RPCS3/rpcs3/pull/12209">some situations</a> use of 512 bit instructions can be profitable for RPCS3, but in this post I&rsquo;ll be covering why the new instructions introduced are useful at 128 and 256 bit lengths.</p>
+<h1 id="larger-register-file">Larger register file</h1>
+<p>The AVX-512 instruction set comes with a register file 4 times the size of that in AVX2. The registers have doubled in width from 256 to 512 bits, and the number of registers available to the programmer have doubled from 16 to 32 as well.</p>
+<p>The PS3s <a href="https://en.wikipedia.org/wiki/Cell_(microprocessor)#Synergistic_Processing_Elements_(SPE)">SPUs</a> have a register file of 128 individual 128 bit wide registers. It doesn&rsquo;t include any general purpose registers like a typical CPU, and even memory addresses will live in these registers, despite the fact that an address will only use 32 of the 128 bits available. Since the SPUs do not implement <a href="https://en.wikipedia.org/wiki/Register_renaming">register renaming</a> or <a href="https://en.wikipedia.org/wiki/Out-of-order_execution">out of order execution</a> it&rsquo;s essential that loops on the SPUs are unrolled to actually take advantage of the two execution pipes available on the hardware.</p>
+<p>Since an unrolled loop on the SPUs may use upwards of 60 registers, this poses a problem for emulators. The solution is to spill out registers to memory when too many are used to fit on the host CPUs registers, but this comes at a cost in terms of performance. The extra registers introduced in AVX-512 help mitigate this issue, though they don&rsquo;t solve it either.</p>
+<h1 id="new-forms-of-old-instructions">New forms of old instructions</h1>
+<p>AVX-512 doesn&rsquo;t just add new instructions, it also adds new encodings for old instructions as well. Many instructions which supported a memory operand now support the &ldquo;embedded broadcast&rdquo; feature, which allows a 32 or 64 bit value from memory to be broadcast to all elements of a vector before use.</p>
+<p>Another useful feature in the new encoding is the &ldquo;disp8&rdquo; compressed displacement. In normal x86-64 instructions an embedded displacement can be encoded in just one byte if the displacement is between -128 and 127. If the displacement exceeds this size a full 4 byte displacement is required in the encoding, even if the displacement is still relatively small, like 256. With disp8 compression the displacement can be encoded with a single byte if the displacement is a multiple of the vector size, and that multiple is between -128 and 127. For instance a displacement of 256 for a 128 bit/16 byte vector would be encoded as 16 * 16.</p>
+<p>Unfortunately the new EVEX encoding requires another byte over the old VEX encoding that was used by AVX instructions, so only 2 bytes are saved over a VEX encoded instruction when disp8 compression is used. Additionally only EVEX encoded instructions can adress registers 16-31, and not all old AVX instructions received the new encoding. These instructions can still be used in AVX-512 code, but some complexity is added since they can&rsquo;t address all the registers.</p>
+<h1 id="mask-registers">Mask registers</h1>
+<p>AVX-512 also adds new mask registers which can be optionally used with EVEX encoded instructions. There are new comparison instructions which generate a mask in the mask registers as the result of a comparison between vectors. When a mask register is used as an operand all of the elements not selected by the mask will either be zeroed or leave the existing value in the destination register untouched. There are 8 mask registers, through k0 - k7, however only k1 - k7 can be used to mask things out, as k0 implicitly behaves as if all elements are selected.</p>
+<p>That means that a sequence like this in AVX:</p>
+<pre tabindex="0"><code>vpcmpeqd xmm1, xmm2, xmm3
+vpaddd xmm2, xmm2, xmm4
+vpand xmm2, xmm1, xmm2
+</code></pre><p>Can be reduced to something like this in AVX512:</p>
+<pre tabindex="0"><code>vpcmpeqd k1, xmm2, xmm3
+vpaddd xmm2{k1}{z}, xmm2, xmm4
+</code></pre><p>On current Intel CPUs instructions with a mask register as an argument have slightly longer latency, however it does not add any extra uops, which is more important than added latency on CPUs with out of order execution. Additionally the ability to save masks in the mask registers instead of in the vector registers should help free up more vector registers, effectively making the AVX-512 register file more than twice as big as the AVX2 one.</p>
+<p>But enough about old instructions and the new ways to use them. How useful are the new instructions in AVX-512 for RPCS3?</p>
+<h1 id="vplzcntd">VPLZCNTD</h1>
+<p>This instruction counts the leading zeroes of each 32 bit element of the input vector. This just so happens to be exactly what the SPU instruction <code>clz</code> does.</p>
+<h1 id="vpopcntb">VPOPCNTB</h1>
+<p>This instruction counts the number of ones in each 8 bit element of the input vector. This just so happens to be exactly what the SPU instruction <code>cntb</code> does.</p>
+<h1 id="vdbpsadbw">VDBPSADBW</h1>
+<p>This instruction is a complicated one, intended for accelerating <a href="https://en.wikipedia.org/wiki/Sum_of_absolute_differences">sum of absolute differences</a> calculations. This instruction performs many absolute difference calculations in parallel, before horizontally summing each block of 4 bytes together to create 16 bit results.</p>
+<p>By using an input of all zeroes for the second input vector, we can abuse this instruction to emulate a horizontal addition instruction. Since the absolute difference between any given number and 0 will simply be our given number, this instruction becomes useful for performing horizontal addition on blocks of 4 bytes. This is useful for emulating the SPU instruction <code>sumb</code>.</p>
+<h1 id="vprolvdvprold">VPROLVD/VPROLD</h1>
+<p>These instructions rotate 32 bit elements in a vector by a specified value. This is a match for the <code>rot</code> and <code>roti</code> SPU instructions.</p>
+<h1 id="vpternlog">VPTERNLOG</h1>
+<p><code>vpternlog</code> is an instruction which can greatly simplify bitwise operations. The instruction takes <a href="https://www.officedaytime.com/simd512e/simdimg/ternlogcalc.html">an immediate byte</a> which controls its operation. For instance the expression <code>(a &amp; c) | (b &amp; ~c)</code> can be realized in just one instruction by utilizing <code>vpternlog</code>. This particular expression will select bits from either vector based off the contents of <code>c</code>. This is useful for emulating the SPU instruction <code>selb</code>.</p>
+<p>Not only is this instruction invaluable for emulating any bitwise instruction for which no previous analogue existed in x86, it&rsquo;s also invaluable for combining sequences of simpler bitwise instructions into smaller sequences. This instruction is very versatile, and is likely to become a favorite of any SIMD programmers who try writing AVX-512 software. The only drawback to this instruction is the dependency on the output register. It&rsquo;d be convenient to have a 2 input version of this instruction as well when only 2 inputs are needed.</p>
+<h1 id="vpdpwssd">VPDPWSSD</h1>
+<p>This instruction is a fusion of 2 existing x86 instructions, <code>vpmaddwd</code> and <code>vpadd</code>. <code>vpmaddwd</code> is a very peculiar instruction, which multiplies pairs of 16 bit numbers vertically, before summing the results horizontally. The <code>vpdpwssd</code> behaves the same, except it adds the result to the destination register as well.</p>
+<p>Since the SPUs only support 16 bit multiplication, <code>vpmaddwd</code> is useful for emulating a number of the instructions in the <code>mpy</code> family of SPU instructions. Several of the <code>mpy</code> family instructions such as <code>mpya</code> add to an accumulator register as well, which makes <code>vpdpwssd</code> suitable for emulating these instructions.</p>
+<p>This instruction was initially made available as part of AVX512-VNNI in the Sunny cove based processors. However, it now also has an AVX encoded version as well, included on the Golden cove and Gracemont based processors.</p>
+<h1 id="vrangeps">VRANGEPS</h1>
+<p>When browsing through the <a href="https://arcb.csc.ncsu.edu/~mueller/cluster/ps3/SDK3.0/docs/arch/SPU_ISA_v1.2_27Jan2007_pub.pdf">public SPU isa documentation</a> there&rsquo;s a curious little paragraph about something the documentation calls &ldquo;extended-range floating point format&rdquo;.</p>
+<p><img src="/ExtendedRangeFP.png" alt="Extended Range Floating Point"></p>
+<p>What in the world is extended-range floating point? And what do they mean by &ldquo;game applications assumes a single-precision floating-point format that is distinct from the IEEE 754 format commonly implemented on general-purpose processors.&rdquo;?</p>
+<p>It turns out that the SPUs inherit the <a href="https://wiki.pcsx2.net/PCSX2_Documentation/Nightmare_on_Floating-Point_Street">bizarre floating point format</a> that the PS2 used. This floating point format does not support <code>NaN</code> (not a number) or <code>INF</code> (infinity), and instead interprets these values as very large floating point numbers. Once a <code>NaN</code> or <code>INF</code> value is generated, it&rsquo;s quite difficult to get rid of as most operations after will return <code>NaN</code> or <code>INF</code>. For instance <code>INF * 0 = INF</code>. <code>INF * -0.2 = -INF</code>. <code>NaN * 3 = NaN</code>.</p>
+<p>The only way to accurately emulate this behavior is to reimplement it in our own software floating point implementation. Unfortunately, software floating point is incredibly slow, so RPCS3 does not (at this time) have software floating point emulation of extended-range floats (referred to by RPCS3 as &ldquo;XFloat&rdquo;).</p>
+<p>One <a href="https://wiki.pcsx2.net/PCSX2_Documentation/What%27s_clamping%3F_And_why_do_we_need_it%3F">possible solution</a> is also used by the PS2 emulator <a href="https://pcsx2.net/">PCSX2</a>. By clamping <code>INF</code> and <code>NaN</code> to the maximum and minimum values representable on x86 CPUs we can solve most floating point related issues without too much overhead. With AVX we need two instructions to clamp our floats down to something useable. We can use <code>vpminsd</code> with a value of <code>0x7f7fffff</code> along with <code>vpminud</code> with a value of <code>0xff7fffff</code>. We have to use the integer version of these instructions since the floating point min/max instructions will return NaN if either operand is NaN.</p>
+<p>By using <code>vrangeps</code> we can realize a 1 instruction solution to this problem. This instruction provides a superset of the functionality offered by the existing floating point min/max instructions. By using the immediate byte <code>0x2</code> with the instruction it will take the absolute value of our inputs, then take the minimum of our inputs, and then copy the sign bit from the first input over to the result, allowing us to do both negative and positive clamping at the same time. Crucially, this instruction will also only return <code>NaN</code> if both inputs are <code>NaN</code>.</p>
+<p>RPCS3 will use the clamping strategy to handle floating point numbers when you select the &ldquo;Relaxed XFloat&rdquo; or the &ldquo;Approximate XFloat&rdquo; options. When using the accurate XFloat option RPCS3 will attempt to emulate the extended-range floats via double precision floats. This can handle some cases that clamping cannot, but it&rsquo;s much slower than clamping, and there are some games which are broken with &ldquo;Accurate XFloat&rdquo;, but not with &ldquo;Approximate XFloat&rdquo;.</p>
+<p>Finally, it&rsquo;s worth noting that double precision float instructions on the SPUs are actually IEEE compliant. Unlike on the PS2 where all of the floating point hardware has a non compliant implementation each piece of the PS3 hardware has its own behavior. The FPU on the main PowerPC core of the PS3 is IEEE compliant. However the vector floating point unit on that same core only implements enough to be compliant with Java&rsquo;s standard for floating point. Throw in the PS3&rsquo;s gpu which has its own floating point hardware, and you&rsquo;re looking at 5 separate pieces of floating point hardware which all have different behavior. What a mess.</p>
+<h1 id="vgf2paffineqb">VGF2PAFFINEQB</h1>
+<p>The <code>vgf2paffineqb</code> is an instruction intended for accelerating cryptographic calculations, however many SIMD programmers have realized that the instruction is useful for non cryptographic purposes as well. For RPCS3 the ability to <a href="http://0x80.pl/articles/avx512-galois-field-for-bit-shuffling.html">shuffle bits</a> is useful.</p>
+<p>This bit shuffling capability is useful for emulating part of the <code>shufb</code> SPU instruction. <code>shufb</code> is similar in behavior to the x86 instruction <code>pshufb</code>. Both instructions will rearrange bytes based off indices provided in another vector. Both instructions also have special case inputs which will insert a constant value into the destination value, rather than taking a value from one of the input vectors.</p>
+<p>The x86 instruction <code>pshufb</code> only has a single special case input:</p>
+<pre tabindex="0"><code>1xxxxxxx = 0x00
+</code></pre><p>The spu instruction <code>shufb</code> has 3 special case inputs:</p>
+<pre tabindex="0"><code>10xxxxxx = 0x00
+110xxxxx = 0xFF
+111xxxxx = 0x80
+</code></pre><p>Additionally, the spu instruction <code>shufb</code> indexes into the vector by reverse order compared to <code>pshufb</code>, and <code>shufb</code> also takes 3 inputs, 2 data vectors and 1 vector containing indices. <code>pshufb</code> only takes 2 input vectors, 1 data vector and 1 vector with indices.</p>
+<p>Actually explaining how <code>vgf2paffineqb</code> is used here is out of scope for this article, and will likely be the next subject I blog about. The AVX2 implementation of <code>shufb</code> has a reciprocal throughput of 4, while the <code>vgf2paffineqb</code> version has a reciprocal throughput of 2.3. This isn&rsquo;t a great result considering that the PS3 has a reciprocal throughput of 1 for this instruction, and the machine runs at 3.2ghz. However only a fraction of <code>shufb</code> instructions will need the full emulation, thanks to many optimizations applied during common uses of the instruction.</p>
+<h1 id="myriad-of-new-shuffle-instructions">Myriad of new shuffle instructions</h1>
+<p>The PS3&rsquo;s SPUs only have a single shuffle instruction, <code>shufb</code>. On x86 we have many different shuffle and permute instructions for shuffling different sizes of data. However, all that&rsquo;s needed to shuffle any size of data around that&rsquo;s larger than a byte is a shuffle bytes instruction.</p>
+<p>When the indices to the <code>shufb</code> instruction are constant we can use one of these instructions designed for shuffling larger data sizes around when appropriate. For instance the new <code>vpermt2d/vpermi2d</code> instructions are useful when shuffling 32 bit data around. Unfortunately not all of the new instructions equally fast. The <code>vpermt2w/vpermi2w</code> and <code>vpermt2b/vpermi2b</code> instructions would be useful for shuffling 16 bit and 8 bit data around, but the performance in current cpus isn&rsquo;t ideal, since these instructions require 3 uops.</p>
+<p>Since RPCS3 uses <a href="https://en.wikipedia.org/wiki/LLVM">LLVM</a> to generate code, it should be able to choose these new instructions when appropriate. Since LLVM has a model of which instructions are fast and slow on each CPU, it should be able to make use of the best instruction for each situation. When/if new CPUs make these instructions fast, LLVM should be ready to use the previously slow instructions as well.</p>
+<h1 id="what-does-all-of-this-mean-for-performance">What does all of this mean for performance?</h1>
+<p><a href="/Gow3Comparison.png"><img src="/Gow3ComparisonSmall.png" alt="Comparison Between ISA targets for GOW3"></a></p>
+<p>Screenshots captured on an i9 12900K @5.2GHz with <a href="https://www.reddit.com/r/rpcs3/comments/tqt1ko/clearing_up_some_avx512_misinformation_and_how_to/">AVX-512 enabled</a></p>
+<p>From left to right: SSE2, SSE4.1, AVX2/FMA, and icelake tier AVX-512.</p>
+<p>The performance when targeting SSE2 is absolutely terrible, likely due to the lack of the <code>pshufb</code> instruction from <a href="https://en.wikipedia.org/wiki/SSSE3">SSSE3</a>. <code>pshufb</code> is invaluable for emulating the <code>shufb</code> instruction, and it&rsquo;s also essential for byteswapping vectors, something that&rsquo;s necessary since the PS3 is a big <a href="https://en.wikipedia.org/wiki/Endianness">endian</a> system, while x86 is little endian.</p>
+<p>The SSE4.1 target achieves an average of 160 FPS, while the AVX2/FMA target achieves an average of 190 FPS. This is a 18% improvement over the SSE4.1 target. AVX2 doesn&rsquo;t include many new instructions over SSE4.1, but it does include a new 3 operand form for instructions, which eliminates many register to register <code>mov</code> instructions. Crucially, all CPUs that support AVX2 also support <a href="https://en.wikipedia.org/wiki/Multiply%E2%80%93accumulate_operation#Fused_multiply%E2%80%93add">FMA</a> instructions. FMA instructions aren&rsquo;t just faster than a chain of multiply + add instructions, but can also produce different results due to not rounding to single precision between the multiply and the add. Accurately emulating this without FMA instructions adds some overhead, and so native FMA operations help out quite a bit.</p>
+<p>The icelake tier AVX-512 target hits a ludicrous 235 FPS average, 23% faster than the AVX2/FMA target. The sheer number of new instructions added in AVX-512 is so large that quite a number of them end up being useful for RPCS3. Unlike AVX2 which was mostly a straightforward extension of existing SSE instructions to 256 bits, AVX-512 includes a huge number of new features which are very useful for SIMD programming, even at lower bit widths. However, since intel chose to market AVX-512 with the -512 moniker, people who aren&rsquo;t familiary with the instruction set usually fixate on the 512 bit vector aspect of the instruction set.</p>
+<h1 id="conclusion">Conclusion</h1>
+<p>One may wonder why it&rsquo;s worth targeting such new instruction sets when only the newest, and fastest processors support these instructions. After all, even when targeting SSE4.1, the 12900K @5.2GHz is able to produce a very playable 160 FPS. However, not all CPUs that support AVX-512 are 8 core monsters clocked at 5.2GHz. Most CPUs that support AVX-512 today are either server CPUs or laptop CPUs. Since Intel had problems ramping production on their 10nm process, intel chose to first release their new AVX-512 supporting line of processors on laptops, which can get away with smaller die sizes. The use of AVX-512 on these lower end laptop chips isn&rsquo;t going to push performance into the 200s, like it does on the giant 12900K, but it may help framerates reach a more playable level.</p>
+<p>The recently announced <a href="https://www.anandtech.com/show/17441/amd-zen-4-update-8-to-10-ipc-uplift-25-more-perfperwatt-vcache-chips-coming">Zen 4</a> was announced to support AVX-512 instructions as well. Since it&rsquo;s likely that the successor to devices such as the <a href="https://store.steampowered.com/steamdeck">steam deck</a> will use a Zen 4 based CPU, it&rsquo;s possible the number of people wanting to play games on a low end device that supports AVX-512 will increase significantly. Even when the target framerate is already achievable without AVX-512, enabling AVX-512 optimizations could improve battery life, or provide more TDP to the gpu which could enable gameplay at higher resolutions. I&rsquo;ve personally already observed this phenomenon today on my Tigerlake based laptop. When targeting AVX-512 the CPU cores use 1W less, and the GPU uses 1W more, enabling higher framerates in RPCS3.</p>
+<p>Outside of RPCS3 AVX-512 isn&rsquo;t widely used by many emulators, however the Arm recompiler <a href="https://github.com/merryhime/dynarmic">dynarmic</a> can take advantage of many AVX-512 instructions as well. Dynarmic is used by the 3DS emulator <a href="https://citra-emu.org/">Citra</a>, the Nintendo Switch emulator <a href="https://yuzu-emu.org/">Yuzu</a> as well as the PS Vita emulator <a href="https://vita3k.org/">Vita3K</a>. I&rsquo;m not aware of any benchmarks comparing AVX2 targets vs AVX-512 for any of these emulators, but I would assume that the gap is smaller than it is with RPCS3, since Arm cores support both vector instructions as well as scalar instructions. Since the average game will spend more time executing scalar instructions than vector instructions, the potential gain from vector optimizations isn&rsquo;t huge. For RPCS3 a large reason why these vector optimizations are so effective is because the SPUs only support operations on vector registers, and so any time spent emulating the SPUs is spent executing vector instructions.</p>
+<p>One emulator that would likely benefit greatly from AVX-512 optimizations is PCSX2. Since the PS2&rsquo;s <a href="https://en.wikipedia.org/wiki/Emotion_Engine#Vector_processing_units">VUs</a> inspired much of the behavior and design for the SPUs, many of the optimizations which apply to RPCS3 should also apply to PCSX2. In particular, <code>vrangeps</code> should be helpful for improving their clamping code.</p>
+<p>Hopefully this should clear up some of the confusion around why AVX-512 is useful for RPCS3. I didn&rsquo;t highlight every AVX-512 instruction that RPCS3 can take advantage of, but I did highlight the ones that I thought were most interesting.</p>
+
+    </div>
+    <footer class="content__footer"></footer>
+
+            </section>
+
+            <section class="page__aside">
+                <div class="aside__about">
+<div class="aside__about">
+    
+<h1 class="about__title">Whatcookie</h1>
+<p class="about__description">Contacts below:</p>
+</div>
+
+
+<ul class="aside__social-links">
+    
+    <li>
+        <a href="https://github.com/whatcookie" rel="me" aria-label="GitHub" title="GitHub"><i class="fab fa-github" aria-hidden="true"></i></a>&nbsp;
+    </li>
+    
+    <li>
+        <a href="mailto:MalcolmJestadt@gmail.com" rel="me" aria-label="Email" title="Email"><i class="fas fa-envelope" aria-hidden="true"></i></a>&nbsp;
+    </li>
+    
+</ul>
+</div>
+                <hr>
+                <div class="aside__content">
+    
+    
+        <p>
+            
+            2022-06-15
+        </p>
+    
+
+                </div>
+            </section>
+
+            <footer class="page__footer"><p class="copyright">© 2022 Malcolm Jestadt</p>
+<p class="advertisement">Powered by <a href="https://gohugo.io/">hugo</a> and <a href="https://github.com/joeroe/risotto">risotto</a>.</p>
+</footer>
+
+        </div>
+    </body>
+
+</html>

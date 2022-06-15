@@ -1,0 +1,78 @@
+baseURL = "https://whatcookie.github.io"
+theme = "risotto"
+title = "Whatcookie's blog"
+author = "Malcolm Jestadt"
+copyright = "© 2022 Malcolm Jestadt"
+paginate = 3
+languageCode = "en"
+DefaultContentLanguage = "en"
+enableInlineShortcodes = true
+# prevent build failures when using Hugo's Instagram shortcode due to deprecated Instagram API.
+# See https://github.com/gohugoio/hugo/issues/7228#issuecomment-714490456
+ignoreErrors = ["error-remote-getjson"]
+
+# Automatically add content sections to main menu
+sectionPagesMenu = "main"
+
+[params]
+
+[params.theme]
+palette = "gruvbox-dark"
+mode = "dark-mode"
+
+# Sidebar: about/bio
+[params.about]
+title = "Whatcookie"
+description = "Contacts below:"
+
+# Sidebar: social links
+# Available icon sets:
+# * FontAwesome 5 <https://fontawesome.com/> ('fas fa-' or 'fab-fa' for brands)
+# * Academicons <https://jpswalsh.github.io/academicons> ('ai ai-')
+
+[[params.socialLinks]]
+icon = "fab fa-github"
+title = "GitHub"
+url = "https://github.com/whatcookie"
+
+[[params.socialLinks]]
+icon = "fas fa-envelope"
+title = "Email"
+url = "mailto:MalcolmJestadt@gmail.com"
+
+[menu]
+
+  [[menu.main]]
+    identifier = "about"
+    name = "About"
+    url = "/about/"
+    weight = 10
+
+[taxonomies]
+category = "categories"
+tag = "tags"
+series = "series"
+
+# For hugo >= 0.60.0, enable inline HTML
+[markup.goldmark.renderer]
+unsafe = true
+
+[privacy]
+
+  [privacy.vimeo]
+    disabled = false
+    simple = true
+
+  [privacy.twitter]
+    disabled = false
+    enableDNT = true
+    simple = true
+
+  [privacy.instagram]
+    disabled = false
+    simple = true
+
+  [privacy.youtube]
+    disabled = false
+    privacyEnhanced = true
+
