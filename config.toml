@@ -41,6 +41,11 @@ title = "Twitter"
 url = "https://x.com/Whatcookie"
 
 [[params.socialLinks]]
+icon = "fas fa-rss"
+title = "RSS"
+url = "/posts/index.xml"
+
+[[params.socialLinks]]
 icon = "fas fa-envelope"
 title = "Email"
 url = "mailto:MalcolmJestadt@gmail.com"
