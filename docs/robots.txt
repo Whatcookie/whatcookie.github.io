@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://whatcookie.github.io/sitemap.xml

@@ -2,9 +2,9 @@ baseURL = "https://whatcookie.github.io"
 theme = "risotto"
 title = "Whatcookie's blog"
 author = "Malcolm Jestadt"
-copyright = "© 2022 Malcolm Jestadt"
+copyright = "© 2026 Malcolm Jestadt"
 paginate = 3
-languageCode = "en"
+locale = "en"
 DefaultContentLanguage = "en"
 enableInlineShortcodes = true
 # prevent build failures when using Hugo's Instagram shortcode due to deprecated Instagram API.
@@ -36,6 +36,11 @@ title = "GitHub"
 url = "https://github.com/whatcookie"
 
 [[params.socialLinks]]
+icon = "fab fa-twitter"
+title = "Twitter"
+url = "https://x.com/Whatcookie"
+
+[[params.socialLinks]]
 icon = "fas fa-envelope"
 title = "Email"
 url = "mailto:MalcolmJestadt@gmail.com"
@@ -63,7 +68,7 @@ unsafe = true
     disabled = false
     simple = true
 
-  [privacy.twitter]
+  [privacy.x]
     disabled = false
     enableDNT = true
     simple = true
